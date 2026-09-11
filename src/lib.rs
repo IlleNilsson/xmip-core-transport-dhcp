@@ -23,17 +23,20 @@
 //! required; `type` defaults to `ack`, `server` sets both `siaddr` and
 //! option 54, and a bare `host:port` answers nothing and is refused.
 
+pub mod loopback;
 pub mod message;
 mod option;
 
 use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
 use std::time::Duration;
 
+pub use loopback::MAX_STREAM;
 pub use message::{BOOTREPLY, BOOTREQUEST, MAX_MESSAGE, Message, MessageType};
 use transport::error::{Result, classify, protocol_error};
 use transport::socket;
 use transport::{Arrived, Directions, Transport};
 
+#[derive(Clone)]
 pub struct DhcpTransport {
     bind: String,
     timeout: Option<Duration>,
@@ -180,11 +183,66 @@ impl Transport for DhcpTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use transport::loopback::Loopback;
 
     const MAC: [u8; 6] = [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff];
 
     fn node() -> DhcpTransport {
         DhcpTransport::new("127.0.0.1:0").timing_out_after(Duration::from_secs(2))
+    }
+
+    /// `len` bytes that a truncation, a reorder or a duplicate would change.
+    fn patterned(len: usize) -> Vec<u8> {
+        (0..len)
+            .map(|at| u8::try_from((at * 31 + at / 251) % 256).unwrap_or(0))
+            .collect()
+    }
+
+    #[test]
+    fn a_stream_rounds_as_informs_each_acknowledged() {
+        let loopback = DhcpTransport::loopback();
+        let opaque: &[u8] = b"\x00line\r\nbreak \xff";
+        let arrived = loopback.round(opaque).expect("opaque");
+        assert_eq!(arrived.bytes, opaque);
+        assert!(
+            arrived.origin_uri.starts_with("dhcp://127.0.0.1:"),
+            "{}",
+            arrived.origin_uri
+        );
+        assert!(
+            arrived
+                .origin_uri
+                .contains("?xid=0x786d6970&type=inform&mac=02:00:00:78:6d:69")
+        );
+        let long = vec![0x2a; 3000];
+        assert_eq!(loopback.round(&long).expect("long").bytes, long);
+        assert!(loopback.round(b"").expect("empty").bytes.is_empty());
+        assert_eq!(loopback.ceiling(), Some(MAX_STREAM));
+        assert!(loopback.refuses(opaque).is_none());
+    }
+
+    #[test]
+    fn the_loopback_returns_the_edges_whole_and_refuses_over_the_ceiling() {
+        let loopback = DhcpTransport::loopback();
+        let edges: [(&str, Vec<u8>); 7] = [
+            ("empty", Vec::new()),
+            ("one byte", vec![0x2a]),
+            ("every byte", (0..=255).collect()),
+            ("nul run", vec![0; 512]),
+            ("high bytes", vec![0xff; 512]),
+            ("crlf storm", b"\r\n".repeat(400)),
+            ("brim", patterned(MAX_STREAM)),
+        ];
+        for (name, payload) in edges {
+            assert_eq!(
+                loopback.round(&payload).expect(name).bytes,
+                payload,
+                "{name}"
+            );
+        }
+        let over = loopback.round(&vec![0; MAX_STREAM + 1]).expect_err("over");
+        assert!(over.message.starts_with("send failed:"), "{over}");
+        assert!(over.message.contains("65291"), "{over}");
     }
 
     #[test]
