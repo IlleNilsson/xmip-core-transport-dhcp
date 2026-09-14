@@ -5,6 +5,7 @@
 use std::net::Ipv4Addr;
 
 use transport::error::{Result, protocol_error};
+use transport::hex;
 
 use crate::message::{
     Message, MessageType, OPTION_CLIENT_ID, OPTION_DNS, OPTION_HOSTNAME, OPTION_LEASE_TIME,
@@ -104,7 +105,7 @@ pub(crate) fn parse_option(code: u8, text: &str) -> Result<Vec<u8>> {
             .ok_or_else(|| protocol_error(format!("not colon-separated hex: {text:?}")))?,
         _ => text
             .strip_prefix("0x")
-            .and_then(unhex)
+            .and_then(|digits| hex::unhex(digits).ok())
             .ok_or_else(|| protocol_error(format!("option {code} takes 0x hex: {text:?}")))?,
     })
 }
@@ -115,14 +116,4 @@ pub(crate) fn hex_pairs(bytes: &[u8], between: &str) -> String {
         .map(|b| format!("{b:02x}"))
         .collect::<Vec<_>>()
         .join(between)
-}
-
-pub(crate) fn unhex(digits: &str) -> Option<Vec<u8>> {
-    if !digits.len().is_multiple_of(2) {
-        return None;
-    }
-    (0..digits.len())
-        .step_by(2)
-        .map(|at| u8::from_str_radix(digits.get(at..at + 2)?, 16).ok())
-        .collect()
 }
