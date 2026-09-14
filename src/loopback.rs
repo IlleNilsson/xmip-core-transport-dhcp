@@ -11,11 +11,11 @@
 //! larger than the largest possible message less its fixed header and magic
 //! cookie is not a DHCP conversation, however many informs it were cut into.
 
-use std::fmt::Write;
 use std::net::UdpSocket;
 
 use transport::Arrived;
 use transport::error::{Result, classify, protocol_error};
+use transport::hex::{hex, unhex};
 use transport::loopback::{FarEnd, LOOPBACK_TIMEOUT, Loopback};
 use transport::socket;
 
@@ -145,46 +145,5 @@ fn acknowledged(client: &UdpSocket) -> Result<()> {
         Ok(())
     } else {
         Err(protocol_error("an answer that is not a DHCPACK"))
-    }
-}
-
-/// `bytes` as lower-case hex pairs, the form an option line takes.
-fn hex(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        let _ = write!(out, "{byte:02x}");
-    }
-    out
-}
-
-/// The bytes `digits` spell, refused where they do not.
-fn unhex(digits: &str) -> Result<Vec<u8>> {
-    if !digits.len().is_multiple_of(2) {
-        return Err(protocol_error(format!(
-            "an odd number of hex digits: {digits:?}"
-        )));
-    }
-    (0..digits.len())
-        .step_by(2)
-        .map(|at| {
-            digits
-                .get(at..at + 2)
-                .and_then(|pair| u8::from_str_radix(pair, 16).ok())
-                .ok_or_else(|| protocol_error(format!("not hex: {digits:?}")))
-        })
-        .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn hex_reads_back_and_refuses_what_is_not_hex() {
-        assert_eq!(hex(&[0, 0x7f, 0xff]), "007fff");
-        assert_eq!(unhex("007fff").expect("hex"), [0, 0x7f, 0xff]);
-        assert!(unhex("").expect("nothing").is_empty());
-        assert!(unhex("abc").is_err(), "odd");
-        assert!(unhex("zz").is_err(), "not hex");
     }
 }
