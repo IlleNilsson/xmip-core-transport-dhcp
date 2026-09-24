@@ -11,7 +11,7 @@ use std::net::Ipv4Addr;
 
 use transport::error::{Result, protocol_error};
 
-use crate::option::{hex_pairs, option_code, option_name, parse_option, render_option};
+use crate::option::{colon_hex, option_code, option_name, parse_option, render_option};
 
 /// The four bytes that say the options follow.
 pub const MAGIC: [u8; 4] = [99, 130, 83, 99];
@@ -167,7 +167,7 @@ impl Message {
     /// `aa:bb:cc:dd:ee:ff`, the hardware address as far as `hlen` says.
     #[must_use]
     pub fn mac(&self) -> String {
-        hex_pairs(&self.chaddr[..usize::from(self.hlen).min(16)], ":")
+        colon_hex(&self.chaddr[..usize::from(self.hlen).min(16)])
     }
 
     /// The hardware address `aa:bb:cc:dd:ee:ff` names.

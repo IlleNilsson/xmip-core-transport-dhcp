@@ -13,9 +13,9 @@
 
 use std::net::UdpSocket;
 
+use codec::hex;
 use transport::Arrived;
 use transport::error::{Result, classify, protocol_error};
-use transport::hex::{hex, unhex};
 use transport::loopback::{FarEnd, LOOPBACK_TIMEOUT, Loopback};
 use transport::socket;
 
@@ -66,7 +66,7 @@ impl FarEnd for Serving {
                 .map_err(|_| protocol_error("option lines that are not text"))?;
             let mut carried = false;
             for digits in text.lines().filter_map(|line| line.strip_prefix(LINE)) {
-                bytes.extend(unhex(digits)?);
+                bytes.extend(hex::decode(digits)?);
                 carried = true;
             }
             let origin = origin.get_or_insert(arrived.origin_uri);
@@ -101,7 +101,7 @@ impl Loopback for DhcpTransport {
         let (client, _) = socket::bind_udp("127.0.0.1:0", self.timeout)?;
         let mut informs: Vec<String> = payload
             .chunks(OPTION)
-            .map(|chunk| format!("message-type=inform\n{LINE}{}\n", hex(chunk)))
+            .map(|chunk| format!("message-type=inform\n{LINE}{}\n", hex::encode(chunk)))
             .collect();
         informs.push("message-type=inform\n".to_string());
         for lines in informs {
