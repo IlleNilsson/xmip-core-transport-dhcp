@@ -20,6 +20,8 @@ path = "src/lib.rs"
 transport = { package = "xmip-core-transport", git = "https://github.com/IlleNilsson/xmip-core-transport", branch = "main" }
 # The estate's encoding primitives: an option's bytes spelled in hex.
 codec = { package = "xmip-core-library-codec", git = "https://github.com/IlleNilsson/xmip-core-library-codec", branch = "main" }
+# The client hardware address in IEEE 802 notation, read and written once.
+net = { package = "xmip-core-library-net", git = "https://github.com/IlleNilsson/xmip-core-library-net", branch = "main" }
 
 [dev-dependencies]
 # The loopback payloads the tests drive, from the capability's test

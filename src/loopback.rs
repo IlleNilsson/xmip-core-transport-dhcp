@@ -15,6 +15,8 @@ use std::net::UdpSocket;
 
 use codec::hex;
 use transport::Arrived;
+use transport::bound::{Bound, Reading};
+use transport::ceiling;
 use transport::error::{Result, classify, protocol_error};
 use transport::loopback::{FarEnd, LOOPBACK_TIMEOUT, Loopback};
 use transport::socket;
@@ -44,24 +46,14 @@ impl DhcpTransport {
     }
 }
 
-/// A bound server waiting for its informs.
-struct Serving {
-    transport: DhcpTransport,
-    socket: UdpSocket,
-    address: String,
-}
-
-impl FarEnd for Serving {
-    fn address(&self) -> &str {
-        &self.address
-    }
-
-    fn take_one(self: Box<Self>) -> Result<Arrived> {
+impl Reading for DhcpTransport {
+    /// A bound server waiting for its informs.
+    fn take_one(self, socket: &UdpSocket) -> Result<Arrived> {
         let mut bytes = Vec::new();
         let mut origin = None;
         loop {
-            let arrived = self.transport.receive_datagram(&self.socket)?;
-            acknowledge(&self.socket, &arrived.origin_uri)?;
+            let arrived = self.receive_datagram(socket)?;
+            acknowledge(socket, &arrived.origin_uri)?;
             let text = std::str::from_utf8(&arrived.bytes)
                 .map_err(|_| protocol_error("option lines that are not text"))?;
             let mut carried = false;
@@ -83,21 +75,11 @@ impl Loopback for DhcpTransport {
     }
 
     fn far_end(&self) -> Result<Box<dyn FarEnd>> {
-        let (socket, address) = self.bind_udp()?;
-        Ok(Box::new(Serving {
-            transport: self.clone(),
-            socket,
-            address,
-        }))
+        Ok(Box::new(Bound::new(self.clone(), self.bind_udp()?)))
     }
 
     fn send_to(&self, address: &str, payload: &[u8]) -> Result<()> {
-        if payload.len() > MAX_STREAM {
-            return Err(protocol_error(format!(
-                "{} bytes is over the {MAX_STREAM} the largest DHCP message holds",
-                payload.len()
-            )));
-        }
+        ceiling::within(payload.len(), MAX_STREAM, "the largest DHCP message holds")?;
         let (client, _) = socket::bind_udp("127.0.0.1:0", self.timeout)?;
         let mut informs: Vec<String> = payload
             .chunks(OPTION)

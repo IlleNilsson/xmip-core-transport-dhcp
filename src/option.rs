@@ -8,7 +8,7 @@ use codec::hex;
 use transport::error::{Result, protocol_error};
 
 use crate::message::{
-    Message, MessageType, OPTION_CLIENT_ID, OPTION_DNS, OPTION_HOSTNAME, OPTION_LEASE_TIME,
+    MessageType, OPTION_CLIENT_ID, OPTION_DNS, OPTION_HOSTNAME, OPTION_LEASE_TIME,
     OPTION_MESSAGE_TYPE, OPTION_PARAMETER_LIST, OPTION_REQUESTED_ADDRESS, OPTION_ROUTER,
     OPTION_SERVER, OPTION_SUBNET_MASK,
 };
@@ -67,7 +67,7 @@ pub(crate) fn render_option(code: u8, value: &[u8]) -> String {
             u32::from_be_bytes([value[0], value[1], value[2], value[3]]).to_string()
         }
         OPTION_HOSTNAME => String::from_utf8_lossy(value).into_owned(),
-        OPTION_CLIENT_ID | OPTION_PARAMETER_LIST => colon_hex(value),
+        OPTION_CLIENT_ID | OPTION_PARAMETER_LIST => net::mac::notation(value),
         _ => format!("0x{}", hex::encode(value)),
     }
 }
@@ -101,20 +101,11 @@ pub(crate) fn parse_option(code: u8, text: &str) -> Result<Vec<u8>> {
             .to_be_bytes()
             .to_vec(),
         OPTION_HOSTNAME => text.as_bytes().to_vec(),
-        OPTION_CLIENT_ID | OPTION_PARAMETER_LIST => Message::parse_mac(text)
-            .ok_or_else(|| protocol_error(format!("not colon-separated hex: {text:?}")))?,
+        OPTION_CLIENT_ID | OPTION_PARAMETER_LIST => net::mac::parse(text)
+            .map_err(|_| protocol_error(format!("not colon-separated hex: {text:?}")))?,
         _ => text
             .strip_prefix("0x")
             .and_then(|digits| hex::decode(digits).ok())
             .ok_or_else(|| protocol_error(format!("option {code} takes 0x hex: {text:?}")))?,
     })
-}
-
-/// `bytes` in the colon notation of a hardware address: `aa:bb:cc`.
-pub(crate) fn colon_hex(bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect::<Vec<_>>()
-        .join(":")
 }

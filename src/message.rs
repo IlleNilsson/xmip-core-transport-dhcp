@@ -11,7 +11,10 @@ use std::net::Ipv4Addr;
 
 use transport::error::{Result, protocol_error};
 
-use crate::option::{colon_hex, option_code, option_name, parse_option, render_option};
+use crate::option::{option_code, option_name, parse_option, render_option};
+
+/// The bytes the client hardware address field holds.
+pub const CHADDR: usize = 16;
 
 /// The four bytes that say the options follow.
 pub const MAGIC: [u8; 4] = [99, 130, 83, 99];
@@ -119,8 +122,8 @@ impl Message {
     /// `mac`, every address zero, no options yet.
     #[must_use]
     pub fn new(op: u8, xid: u32, mac: &[u8]) -> Self {
-        let mut chaddr = [0u8; 16];
-        let hlen = mac.len().min(16);
+        let mut chaddr = [0u8; CHADDR];
+        let hlen = mac.len().min(CHADDR);
         chaddr[..hlen].copy_from_slice(&mac[..hlen]);
         Self {
             op,
@@ -167,20 +170,7 @@ impl Message {
     /// `aa:bb:cc:dd:ee:ff`, the hardware address as far as `hlen` says.
     #[must_use]
     pub fn mac(&self) -> String {
-        colon_hex(&self.chaddr[..usize::from(self.hlen).min(16)])
-    }
-
-    /// The hardware address `aa:bb:cc:dd:ee:ff` names.
-    #[must_use]
-    pub fn parse_mac(text: &str) -> Option<Vec<u8>> {
-        let parts: Vec<&str> = text.split([':', '-']).collect();
-        if parts.is_empty() || parts.len() > 16 {
-            return None;
-        }
-        parts
-            .into_iter()
-            .map(|part| u8::from_str_radix(part, 16).ok())
-            .collect()
+        net::mac::notation(&self.chaddr[..usize::from(self.hlen).min(CHADDR)])
     }
 
     /// Option 12 as text.
@@ -382,7 +372,6 @@ mod tests {
         assert_eq!(back.sname.len(), 63, "cut to the field less its NUL");
         assert_eq!(back.file.len(), 127);
         assert_eq!(MessageType::parse("nak"), Some(MessageType::Nak));
-        assert_eq!(Message::parse_mac("aa-bb"), Some(vec![0xaa, 0xbb]));
     }
 
     #[test]
@@ -410,7 +399,5 @@ mod tests {
             encode(&base.with(60, vec![0; 255]).with(61, vec![0; 255])).is_err(),
             "over 576"
         );
-        assert!(Message::parse_mac("").is_none() || Message::parse_mac("").is_some());
-        assert!(Message::parse_mac("a:b:c:d:e:f:1:2:3:4:5:6:7:8:9:0:1").is_none());
     }
 }

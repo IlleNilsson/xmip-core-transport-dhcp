@@ -109,7 +109,8 @@ impl DhcpTransport {
             .and_then(parse_xid)
             .ok_or_else(|| protocol_error(format!("a reply without ?xid=: {target}")))?;
         let mac = value("mac")
-            .and_then(Message::parse_mac)
+            .and_then(|text| net::mac::parse(text).ok())
+            .filter(|mac| mac.len() <= message::CHADDR)
             .ok_or_else(|| protocol_error(format!("a reply without &mac=: {target}")))?;
         let kind = match value("type") {
             None => MessageType::Ack,
