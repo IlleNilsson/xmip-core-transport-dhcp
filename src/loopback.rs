@@ -94,10 +94,6 @@ impl Loopback for DhcpTransport {
         }
         Ok(())
     }
-
-    fn unblock(&self, _address: &str) {
-        // The receive has its own timeout; there is no listener to poke.
-    }
 }
 
 /// The DHCPINFORM carrying `lines`.
