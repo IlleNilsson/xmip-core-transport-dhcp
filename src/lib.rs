@@ -38,6 +38,7 @@ use std::time::Duration;
 pub use loopback::MAX_STREAM;
 pub use message::{BOOTREPLY, BOOTREQUEST, MAX_MESSAGE, Message, MessageType};
 use transport::error::{Result, classify, protocol_error};
+use transport::sender::Sender;
 use transport::socket;
 use transport::{Arrived, Configured, Directions, Transport};
 use xcore::settings::{Applies, Kind, Presence, Read, Setting, Settings};
@@ -46,6 +47,8 @@ use xcore::settings::{Applies, Kind, Presence, Read, Setting, Settings};
 pub struct DhcpTransport {
     bind: String,
     timeout: Option<Duration>,
+    /// The socket every send leaves from, bound once.
+    sender: Sender,
 }
 
 impl DhcpTransport {
@@ -55,6 +58,7 @@ impl DhcpTransport {
         Self {
             bind: bind.into(),
             timeout: None,
+            sender: Sender::new(),
         }
     }
 
@@ -178,12 +182,7 @@ impl Transport for DhcpTransport {
 
     fn send(&self, target: &str, bytes: &[u8]) -> Result<()> {
         let (address, reply) = Self::reply_for(target, bytes)?;
-        let sender =
-            UdpSocket::bind("0.0.0.0:0").map_err(|e| classify("binding the sending socket", &e))?;
-        sender
-            .send_to(&message::encode(&reply)?, address)
-            .map_err(|e| classify("sending the reply", &e))?;
-        Ok(())
+        self.sender.send_to(&message::encode(&reply)?, &address)
     }
 }
 
