@@ -38,6 +38,7 @@ use std::time::Duration;
 pub use loopback::MAX_STREAM;
 pub use message::{BOOTREPLY, BOOTREQUEST, MAX_MESSAGE, Message, MessageType};
 use transport::error::{Result, classify, protocol_error};
+use transport::kept::Kept;
 use transport::sender::Sender;
 use transport::socket;
 use transport::{Arrived, Configured, Directions, Transport};
@@ -49,6 +50,8 @@ pub struct DhcpTransport {
     timeout: Option<Duration>,
     /// The socket every send leaves from, bound once.
     sender: Sender,
+    /// The socket the first receive binds, and every receive reads.
+    receiving: Kept<UdpSocket>,
 }
 
 impl DhcpTransport {
@@ -59,6 +62,7 @@ impl DhcpTransport {
             bind: bind.into(),
             timeout: None,
             sender: Sender::new(),
+            receiving: Kept::new(),
         }
     }
 
@@ -175,9 +179,11 @@ impl Transport for DhcpTransport {
         Directions::BOTH
     }
 
+    /// One client message, from the socket the first receive bound and
+    /// kept: what arrived between two receives waits in its buffer.
     fn receive(&self) -> Result<Vec<Arrived>> {
-        let (socket, _) = self.bind_udp()?;
-        Ok(vec![self.receive_datagram(&socket)?])
+        let socket = self.receiving.bound(|| self.bind_udp())?;
+        Ok(vec![self.receive_datagram(socket)?])
     }
 
     fn send(&self, target: &str, bytes: &[u8]) -> Result<()> {
@@ -277,6 +283,34 @@ mod tests {
         let over = loopback.round(&vec![0; MAX_STREAM + 1]).expect_err("over");
         assert!(over.message.starts_with("send failed:"), "{over}");
         assert!(over.message.contains("65291"), "{over}");
+    }
+
+    #[test]
+    fn every_receive_reads_the_socket_the_first_bound() {
+        // Every request lands before any receive: in the kept socket's
+        // buffer, taken in order by receives that bind nothing.
+        let far_end = node();
+        far_end
+            .receiving
+            .bound(|| far_end.bind_udp())
+            .expect("bound");
+        let address = far_end.receiving.address().expect("address");
+        let client = UdpSocket::bind("127.0.0.1:0").expect("client");
+        for xid in 1..=5 {
+            let inform = Message::new(BOOTREQUEST, xid, &MAC)
+                .with_lines(format!("hostname=node-{xid}\n").as_bytes())
+                .expect("lines");
+            client
+                .send_to(&message::encode(&inform).expect("encode"), address)
+                .expect("sent");
+        }
+        for xid in 1..=5 {
+            let arrived = far_end.receive().expect("received");
+            assert_eq!(
+                arrived[0].bytes,
+                format!("hostname=node-{xid}\n").as_bytes()
+            );
+        }
     }
 
     #[test]
