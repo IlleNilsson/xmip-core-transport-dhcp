@@ -22,6 +22,11 @@
 //! options. `xid` and `mac` name the transaction being answered and are
 //! required; `type` defaults to `ack`, `server` sets both `siaddr` and
 //! option 54, and a bare `host:port` answers nothing and is refused.
+//!
+//! The Stream is text by the technology's own declaration (ADR-0038): UTF-8
+//! `name=value` lines, one option each. A send whose bytes are not UTF-8,
+//! or a line that is not an option, is refused with the reason, never
+//! guessed at; an option value that is not text is written as `0x` hex.
 
 pub mod loopback;
 pub mod message;
@@ -34,7 +39,8 @@ pub use loopback::MAX_STREAM;
 pub use message::{BOOTREPLY, BOOTREQUEST, MAX_MESSAGE, Message, MessageType};
 use transport::error::{Result, classify, protocol_error};
 use transport::socket;
-use transport::{Arrived, Directions, Transport};
+use transport::{Arrived, Configured, Directions, Transport};
+use xcore::settings::{Applies, Kind, Presence, Read, Setting, Settings};
 
 #[derive(Clone)]
 pub struct DhcpTransport {
@@ -181,11 +187,52 @@ impl Transport for DhcpTransport {
     }
 }
 
+impl Configured for DhcpTransport {
+    /// The address is where a Receive Location listens — `0.0.0.0:67` the
+    /// server port; a Send Location answers the transaction its target names.
+    const SETTINGS: &'static Settings = &Settings {
+        technology: env!("CARGO_PKG_NAME"),
+        settings: &[Setting {
+            name: "timeout",
+            kind: Kind::Duration,
+            presence: Presence::Optional,
+            meaning: "How long a receive waits for a client's message; unbounded when left out.",
+            applies: Applies::Receive,
+        }],
+    };
+
+    fn configured(address: &str, settings: &Read) -> Result<Self> {
+        let transport = Self::new(address);
+        Ok(match settings.optional_duration("timeout") {
+            Some(timeout) => transport.timing_out_after(timeout),
+            None => transport,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use transport::loopback::Loopback;
     use transport::payload::{edge_payloads, patterned};
+    use xcore::settings::Given;
+
+    #[test]
+    fn dhcp_declares_its_settings_and_reads_through_them() {
+        assert_eq!(DhcpTransport::SETTINGS.problems(), Vec::<String>::new());
+        let given = [("timeout".to_string(), Given::Text("10s".to_string()))];
+        let built = DhcpTransport::open("0.0.0.0:67", Applies::Receive, &given).expect("built");
+        assert_eq!(built.timeout, Some(Duration::from_secs(10)));
+        assert_eq!(built.bind, "0.0.0.0:67");
+        let Err(refused) = DhcpTransport::open("0.0.0.0:67", Applies::Send, &given) else {
+            panic!("timeout is a receive setting");
+        };
+        assert!(
+            refused.message.contains("\"timeout\""),
+            "{}",
+            refused.message
+        );
+    }
 
     const MAC: [u8; 6] = [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff];
 

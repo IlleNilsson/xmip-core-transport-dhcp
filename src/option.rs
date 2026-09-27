@@ -43,7 +43,8 @@ pub(crate) fn option_code(name: &str) -> Option<u8> {
 }
 
 /// A value as its option's shape writes it: a type name, addresses dotted
-/// and comma-separated, a time in seconds, text, or `0x` hex.
+/// and comma-separated, a time in seconds, text, or `0x` hex. A hostname
+/// that is not UTF-8 text a line can hold is `0x` hex, never a lossy guess.
 pub(crate) fn render_option(code: u8, value: &[u8]) -> String {
     match code {
         OPTION_MESSAGE_TYPE => value
@@ -66,7 +67,16 @@ pub(crate) fn render_option(code: u8, value: &[u8]) -> String {
         OPTION_LEASE_TIME if value.len() == 4 => {
             u32::from_be_bytes([value[0], value[1], value[2], value[3]]).to_string()
         }
-        OPTION_HOSTNAME => String::from_utf8_lossy(value).into_owned(),
+        OPTION_HOSTNAME => match std::str::from_utf8(value) {
+            Ok(text)
+                if !text.is_empty()
+                    && !text.starts_with("0x")
+                    && !text.chars().any(char::is_control) =>
+            {
+                text.to_string()
+            }
+            _ => format!("0x{}", hex::encode(value)),
+        },
         OPTION_CLIENT_ID | OPTION_PARAMETER_LIST => net::mac::notation(value),
         _ => format!("0x{}", hex::encode(value)),
     }
@@ -100,7 +110,10 @@ pub(crate) fn parse_option(code: u8, text: &str) -> Result<Vec<u8>> {
             .map_err(|_| protocol_error(format!("not seconds: {text:?}")))?
             .to_be_bytes()
             .to_vec(),
-        OPTION_HOSTNAME => text.as_bytes().to_vec(),
+        OPTION_HOSTNAME => text
+            .strip_prefix("0x")
+            .and_then(|digits| hex::decode(digits).ok())
+            .unwrap_or_else(|| text.as_bytes().to_vec()),
         OPTION_CLIENT_ID | OPTION_PARAMETER_LIST => net::mac::parse(text)
             .map_err(|_| protocol_error(format!("not colon-separated hex: {text:?}")))?,
         _ => text
@@ -108,4 +121,21 @@ pub(crate) fn parse_option(code: u8, text: &str) -> Result<Vec<u8>> {
             .and_then(|digits| hex::decode(digits).ok())
             .ok_or_else(|| protocol_error(format!("option {code} takes 0x hex: {text:?}")))?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_hostname_that_is_not_text_is_hex_both_ways() {
+        let host = OPTION_HOSTNAME;
+        assert_eq!(render_option(host, b"printer-7"), "printer-7");
+        for value in [&b"\xffbox"[..], b"a\nb", b"0xbeef", b""] {
+            let line = render_option(host, value);
+            assert!(line.starts_with("0x"), "{line}");
+            assert_eq!(parse_option(host, &line).expect("hex"), value);
+        }
+        assert_eq!(parse_option(host, "0xzz").expect("text"), b"0xzz");
+    }
 }

@@ -2,6 +2,8 @@
 
 DHCP transport: RFC 2131 over UDP — discover, request, release and inform arrive as Streams of their options, a Send Location offers, acknowledges or refuses a lease. A technology of [xmip-core-transport](https://github.com/IlleNilsson/xmip-core-transport).
 
+The Stream is UTF-8 `name=value` lines, one option each; bytes that are not UTF-8, or a line that is not an option, are refused. An option value that is not text is written as `0x` hex.
+
 ## Toolchain
 
 `rust-toolchain.toml` pins the toolchain for the whole estate. Do not change it
