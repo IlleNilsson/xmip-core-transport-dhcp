@@ -23,9 +23,9 @@ pub const BOOTREQUEST: u8 = 1;
 /// A message from a server.
 pub const BOOTREPLY: u8 = 2;
 /// Ethernet, the one hardware type the estate has.
-pub const HTYPE_ETHERNET: u8 = 1;
+const HTYPE_ETHERNET: u8 = 1;
 /// The smallest datagram a relay forwards.
-pub const MIN_MESSAGE: usize = 300;
+const MIN_MESSAGE: usize = 300;
 /// The largest a client must take without option 57.
 pub const MAX_MESSAGE: usize = 576;
 
@@ -39,7 +39,7 @@ pub const OPTION_MESSAGE_TYPE: u8 = 53;
 pub const OPTION_SERVER: u8 = 54;
 pub const OPTION_PARAMETER_LIST: u8 = 55;
 pub const OPTION_CLIENT_ID: u8 = 61;
-pub const OPTION_END: u8 = 255;
+const OPTION_END: u8 = 255;
 
 /// Option 53.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

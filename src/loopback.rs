@@ -14,9 +14,9 @@
 use std::net::UdpSocket;
 
 use codec::hex;
+use net::ceiling;
 use transport::Arrived;
 use transport::bound::{Bound, Reading};
-use transport::ceiling;
 use transport::error::{Result, classify, protocol_error};
 use transport::loopback::{FarEnd, LOOPBACK_TIMEOUT, Loopback};
 use transport::socket;
