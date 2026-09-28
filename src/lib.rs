@@ -37,6 +37,7 @@ use std::time::Duration;
 
 pub use loopback::MAX_STREAM;
 pub use message::{BOOTREPLY, BOOTREQUEST, MAX_MESSAGE, Message, MessageType};
+use net::Target;
 use transport::error::{Result, classify, protocol_error};
 use transport::kept::Kept;
 use transport::sender::Sender;
@@ -105,30 +106,23 @@ impl DhcpTransport {
     /// A target that is not `dhcp://host:port?xid=…&mac=…`, or lines that
     /// are not options.
     pub fn reply_for(target: &str, bytes: &[u8]) -> Result<(String, Message)> {
-        let Some((address, rest)) = socket::target("dhcp", target) else {
+        let Some(named) = Target::under(&["dhcp"], target) else {
             return Err(protocol_error(format!(
                 "a dhcp target answers a transaction: dhcp://host:port?xid=…&mac=…, got {target}"
             )));
         };
-        let query = rest
-            .strip_prefix('?')
-            .or_else(|| address.split_once('?').map(|(_, q)| q));
-        let address = address.split_once('?').map_or(address, |(a, _)| a);
-        let value = |key: &str| {
-            query?
-                .split('&')
-                .find_map(|pair| pair.strip_prefix(key)?.strip_prefix('='))
-        };
+        let value = |key: &str| named.query_value(key);
         let xid = value("xid")
+            .as_deref()
             .and_then(parse_xid)
             .ok_or_else(|| protocol_error(format!("a reply without ?xid=: {target}")))?;
         let mac = value("mac")
-            .and_then(|text| net::mac::parse(text).ok())
+            .and_then(|text| net::mac::parse(&text).ok())
             .filter(|mac| mac.len() <= message::CHADDR)
             .ok_or_else(|| protocol_error(format!("a reply without &mac=: {target}")))?;
         let kind = match value("type") {
             None => MessageType::Ack,
-            Some(name) => MessageType::parse(name)
+            Some(name) => MessageType::parse(&name)
                 .ok_or_else(|| protocol_error(format!("not a message type: {name}")))?,
         };
         let address_of = |key: &str| -> Result<Ipv4Addr> {
@@ -145,15 +139,16 @@ impl DhcpTransport {
         if !server.is_unspecified() {
             reply = reply.with(message::OPTION_SERVER, server.octets().to_vec());
         }
-        Ok((address.to_string(), reply.with_lines(bytes)?))
+        Ok((named.authority().to_string(), reply.with_lines(bytes)?))
     }
 }
 
 /// `0x3903f326` or `956363558`.
 fn parse_xid(text: &str) -> Option<u32> {
-    match text.strip_prefix("0x") {
-        Some(hex) => u32::from_str_radix(hex, 16).ok(),
-        None => text.parse().ok(),
+    if text.starts_with("0x") {
+        codec::hex::prefixed_number(text).ok()
+    } else {
+        text.parse().ok()
     }
 }
 
