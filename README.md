@@ -12,6 +12,14 @@ A send target is read by `net::Target` in [xmip-core-library-net](https://github
 
 A `0x` number in a target is read by `codec::hex::prefixed_number` in [xmip-core-library-codec](https://github.com/IlleNilsson/xmip-core-library-codec), which refuses a sign; until 2026-09-28 it was read with `from_str_radix`, which took `0x+7e8`.
 
+## Acknowledgement
+
+Acceptance is at-most-once here. A client message is a datagram, and what
+answers it (an offer, an ack, a nak) is the Journey's to send through a Send
+Location, not this receive's to defer; a release is answered by nobody. A
+client that hears nothing sends a discover or a request again on DHCP's own
+schedule, which is not a verdict. Each message arrives whole.
+
 ## Toolchain
 
 `rust-toolchain.toml` pins the toolchain for the whole estate. Do not change it

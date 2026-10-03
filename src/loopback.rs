@@ -15,7 +15,7 @@ use std::net::UdpSocket;
 
 use codec::hex;
 use net::ceiling;
-use transport::Arrived;
+use transport::Taken;
 use transport::bound::{Bound, Reading};
 use transport::error::{Result, classify, protocol_error};
 use transport::loopback::{FarEnd, LOOPBACK_TIMEOUT, Loopback};
@@ -48,11 +48,11 @@ impl DhcpTransport {
 
 impl Reading for DhcpTransport {
     /// A bound server waiting for its informs.
-    fn take_one(self, socket: &UdpSocket) -> Result<Arrived> {
+    fn take_one(self, socket: &UdpSocket) -> Result<Taken> {
         let mut bytes = Vec::new();
         let mut origin = None;
         loop {
-            let arrived = self.receive_datagram(socket)?;
+            let arrived = self.receive_datagram(socket)?.taken()?;
             acknowledge(socket, &arrived.origin_uri)?;
             let text = std::str::from_utf8(&arrived.bytes)
                 .map_err(|_| protocol_error("option lines that are not text"))?;
@@ -63,7 +63,7 @@ impl Reading for DhcpTransport {
             }
             let origin = origin.get_or_insert(arrived.origin_uri);
             if !carried {
-                return Ok(Arrived::new(origin.as_str(), bytes));
+                return Ok(Taken::new(origin.as_str(), bytes));
             }
         }
     }
