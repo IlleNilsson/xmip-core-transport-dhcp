@@ -23,6 +23,13 @@
 //! required; `type` defaults to `ack`, `server` sets both `siaddr` and
 //! option 54, and a bare `host:port` answers nothing and is refused.
 //!
+//! **Acceptance is at-most-once here** ([`AT_MOST_ONCE`]): a client message
+//! is a datagram, and what answers it — an offer, an ack, a nak — is the
+//! Journey's to send through a Send Location, not this receive's to defer;
+//! a release is answered by nobody. A client that hears nothing sends a
+//! discover or a request again on its own schedule, which is DHCP's, not a
+//! verdict. Each message arrives whole.
+//!
 //! The Stream is text by the technology's own declaration (ADR-0038): UTF-8
 //! `name=value` lines, one option each. A send whose bytes are not UTF-8,
 //! or a line that is not an option, is refused with the reason, never
@@ -42,8 +49,14 @@ use transport::error::{Result, classify, protocol_error};
 use transport::kept::Kept;
 use transport::sender::Sender;
 use transport::socket;
-use transport::{Arrived, Configured, Directions, Transport};
+use transport::{Acknowledgement, Arrived, Configured, Directions, Transport};
 use xcore::settings::{Applies, Kind, Presence, Read, Setting, Settings};
+
+/// Why a DHCP client message cannot be acknowledged after the receive
+/// cycle.
+pub const AT_MOST_ONCE: &str = "a DHCP client message is a datagram whose answer, if any, is a \
+                                Journey's to send, not this receive's: a release is never \
+                                answered at all";
 
 #[derive(Clone)]
 pub struct DhcpTransport {
@@ -152,8 +165,10 @@ fn parse_xid(text: &str) -> Option<u32> {
     }
 }
 
+/// One client message, whole; acceptance is at-most-once
+/// ([`AT_MOST_ONCE`]).
 fn arrived(peer: SocketAddr, message: &Message) -> Arrived {
-    Arrived::new(
+    Arrived::whole(
         format!(
             "dhcp://{peer}?xid={:#010x}&type={}&mac={}&hostname={}",
             message.xid,
@@ -162,6 +177,7 @@ fn arrived(peer: SocketAddr, message: &Message) -> Arrived {
             message.hostname()
         ),
         message.option_lines(),
+        Acknowledgement::at_most_once(AT_MOST_ONCE),
     )
 }
 
@@ -174,8 +190,14 @@ impl Transport for DhcpTransport {
         Directions::BOTH
     }
 
+    fn arrivals(&self) -> transport::Arrivals {
+        transport::Arrivals::Unordered("each datagram is its own")
+    }
+
     /// One client message, from the socket the first receive bound and
     /// kept: what arrived between two receives waits in its buffer.
+    /// Acceptance is at-most-once here: the answer is a Journey's to send
+    /// ([`AT_MOST_ONCE`]).
     fn receive(&self) -> Result<Vec<Arrived>> {
         let socket = self.receiving.bound(|| self.bind_udp())?;
         Ok(vec![self.receive_datagram(socket)?])
@@ -300,9 +322,11 @@ mod tests {
                 .expect("sent");
         }
         for xid in 1..=5 {
-            let arrived = far_end.receive().expect("received");
+            let mut arrived = far_end.receive().expect("received");
+            let arrived = arrived.remove(0);
+            assert!(!arrived.defers(), "a client message is at-most-once");
             assert_eq!(
-                arrived[0].bytes,
+                arrived.taken().expect("taken").bytes,
                 format!("hostname=node-{xid}\n").as_bytes()
             );
         }
@@ -320,6 +344,7 @@ mod tests {
             .send_to(&message::encode(&discover).expect("encode"), &address)
             .expect("discover");
         let arrived = far_end.receive_datagram(&socket).expect("receiving");
+        let arrived = arrived.taken().expect("taken");
         assert!(
             arrived.origin_uri.ends_with(
                 "?xid=0x3903f326&type=discover&mac=aa:bb:cc:dd:ee:ff&hostname=printer-7"
@@ -336,6 +361,7 @@ mod tests {
             .send_to(&message::encode(&bootp).expect("encode"), &address)
             .expect("bootp");
         let plain = far_end.receive_datagram(&socket).expect("receiving");
+        let plain = plain.taken().expect("taken");
         assert!(
             plain
                 .origin_uri
