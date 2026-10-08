@@ -15,6 +15,7 @@ use std::net::UdpSocket;
 
 use codec::hex;
 use net::ceiling;
+use transport::ArrivalIdentity;
 use transport::Taken;
 use transport::bound::{Bound, Reading};
 use transport::error::{Result, classify, protocol_error};
@@ -61,15 +62,21 @@ impl Reading for DhcpTransport {
                 bytes.extend(hex::decode(digits)?);
                 carried = true;
             }
-            let origin = origin.get_or_insert(arrived.origin_uri);
+            let first = origin.get_or_insert(arrived);
             if !carried {
-                return Ok(Taken::new(origin.as_str(), bytes));
+                let mut taken = Taken::new(first.origin_uri.as_str(), bytes);
+                taken.observed = std::mem::take(&mut first.observed);
+                return Ok(taken);
             }
         }
     }
 }
 
 impl Loopback for DhcpTransport {
+    fn arrival_identity(&self) -> ArrivalIdentity {
+        ArrivalIdentity::PEER_AND_MAC
+    }
+
     fn ceiling(&self) -> Option<usize> {
         Some(MAX_STREAM)
     }

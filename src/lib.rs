@@ -179,6 +179,8 @@ fn arrived(peer: SocketAddr, message: &Message) -> Arrived {
         message.option_lines(),
         Acknowledgement::at_most_once(AT_MOST_ONCE),
     )
+    .from_peer(peer)
+    .from_peer_mac(&message.mac())
 }
 
 impl Transport for DhcpTransport {
