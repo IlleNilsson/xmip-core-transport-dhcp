@@ -196,6 +196,10 @@ impl Transport for DhcpTransport {
         transport::Arrivals::Unordered("each datagram is its own")
     }
 
+    fn waiting(&self) -> transport::Waiting {
+        transport::Waiting::Waits("a read of the socket waits for a client's message")
+    }
+
     /// One client message, from the socket the first receive bound and
     /// kept: what arrived between two receives waits in its buffer.
     /// Acceptance is at-most-once here: the answer is a Journey's to send
