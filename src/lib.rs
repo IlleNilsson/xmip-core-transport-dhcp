@@ -286,7 +286,7 @@ mod tests {
         );
         let long = vec![0x2a; 3000];
         assert_eq!(loopback.round(&long).expect("long").bytes, long);
-        assert!(loopback.round(b"").expect("empty").bytes.is_empty());
+        assert_eq!(loopback.round(b"").expect("empty").bytes, [] as [u8; 0]);
         assert_eq!(loopback.ceiling(), Some(MAX_STREAM));
         assert!(loopback.refuses(opaque).is_none());
     }
@@ -373,7 +373,7 @@ mod tests {
                 .origin_uri
                 .ends_with("?xid=0x00000007&type=bootp&mac=aa:bb:cc:dd&hostname=")
         );
-        assert!(plain.bytes.is_empty());
+        assert_eq!(plain.bytes, [] as [u8; 0]);
     }
 
     #[test]
