@@ -384,7 +384,7 @@ mod tests {
         assert!(decode(&cut).is_err(), "option past the end");
         let base = Message::new(BOOTREQUEST, 1, &MAC);
         assert!(base.clone().with_lines(b"no equals").is_err());
-        assert!(base.clone().with_lines(b"colour=blue").is_err());
+        assert!(base.clone().with_lines(b"color=blue").is_err());
         assert!(base.clone().with_lines(b"router=nowhere").is_err());
         assert!(base.clone().with_lines(b"lease-time=soon").is_err());
         assert!(base.clone().with_lines(b"message-type=hello").is_err());
