@@ -119,7 +119,7 @@ impl DhcpTransport {
     /// A target that is not `dhcp://host:port?xid=…&mac=…`, or lines that
     /// are not options.
     pub fn reply_for(target: &str, bytes: &[u8]) -> Result<(String, Message)> {
-        let Some(named) = Target::under(&["dhcp"], target) else {
+        let Some(named) = Target::under(Self::SCHEMES, target) else {
             return Err(protocol_error(format!(
                 "a dhcp target answers a transaction: dhcp://host:port?xid=…&mac=…, got {target}"
             )));
@@ -233,6 +233,9 @@ impl Configured for DhcpTransport {
             applies: Applies::Receive,
         }],
     };
+
+    /// The schemes a Location's address is entered with to choose this technology.
+    const SCHEMES: &'static [&'static str] = &["dhcp"];
 
     fn configured(address: &str, settings: &Read) -> Result<Self> {
         let transport = Self::new(address);
