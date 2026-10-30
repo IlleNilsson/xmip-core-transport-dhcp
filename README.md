@@ -15,7 +15,7 @@ A `0x` number in a target is read by `codec::hex::prefixed_number` in [xmip-core
 ## Acknowledgement
 
 Acceptance is at-most-once here. A client message is a datagram, and what
-answers it (an offer, an ack, a nak) is the Journey's to send through a Send
+answers it (an offer, an ack, a nak) is a Message's to send through a Send
 Location, not this receive's to defer; a release is answered by nobody. A
 client that hears nothing sends a discover or a request again on DHCP's own
 schedule, which is not a verdict. Each message arrives whole.

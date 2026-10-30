@@ -8,10 +8,10 @@
 //! makes a Receive Location on port 67 the earliest possible sight of one:
 //! a discover names the device, a request names the address it wants, a
 //! release says it has gone, an inform asks for configuration. A Send
-//! Location is how an Xmip Journey answers — offers, acknowledges or
+//! Location is how an Xmip Message answers — offers, acknowledges or
 //! refuses a lease from whatever authoritative source it consulted: the
 //! asset register, the network team's allocation, a policy. The transport
-//! carries the conversation; the Journey decides.
+//! carries the conversation; Xmip's processing decides.
 //!
 //! The origin URI carries what the fixed fields and option 53 knew:
 //! `dhcp://peer?xid=0x3903f326&type=discover&mac=aa:bb:cc:dd:ee:ff&hostname=printer-7`.
@@ -25,7 +25,7 @@
 //!
 //! **Acceptance is at-most-once here** ([`AT_MOST_ONCE`]): a client message
 //! is a datagram, and what answers it — an offer, an ack, a nak — is the
-//! Journey's to send through a Send Location, not this receive's to defer;
+//! Message's to send through a Send Location, not this receive's to defer;
 //! a release is answered by nobody. A client that hears nothing sends a
 //! discover or a request again on its own schedule, which is DHCP's, not a
 //! verdict. Each message arrives whole.
@@ -55,7 +55,7 @@ use xcore::settings::{Applies, Kind, Presence, Read, Setting, Settings};
 /// Why a DHCP client message cannot be acknowledged after the receive
 /// cycle.
 pub const AT_MOST_ONCE: &str = "a DHCP client message is a datagram whose answer, if any, is a \
-                                Journey's to send, not this receive's: a release is never \
+                                Message's to send, not this receive's: a release is never \
                                 answered at all";
 
 #[derive(Clone)]
@@ -202,7 +202,7 @@ impl Transport for DhcpTransport {
 
     /// One client message, from the socket the first receive bound and
     /// kept: what arrived between two receives waits in its buffer.
-    /// Acceptance is at-most-once here: the answer is a Journey's to send
+    /// Acceptance is at-most-once here: the answer is a Message's to send
     /// ([`AT_MOST_ONCE`]).
     fn receive_up_to(&self, _most: usize) -> Result<Vec<Arrived>> {
         let socket = self.receiving.bound(|| self.bind_udp())?;
