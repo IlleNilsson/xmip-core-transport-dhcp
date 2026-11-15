@@ -50,7 +50,7 @@ use transport::kept::Kept;
 use transport::sender::Sender;
 use transport::socket;
 use transport::{Acknowledgement, Arrived, Configured, Directions, Transport};
-use xcore::settings::{Applies, Kind, Presence, Read, Setting, Settings};
+use xcore::settings::{Applies, Read, Settings};
 
 /// Why a DHCP client message cannot be acknowledged after the receive
 /// cycle.
@@ -78,13 +78,6 @@ impl DhcpTransport {
             sender: Sender::new(),
             receiving: Kept::new(),
         }
-    }
-
-    /// Give up waiting for a message after `timeout`.
-    #[must_use]
-    pub const fn timing_out_after(mut self, timeout: Duration) -> Self {
-        self.timeout = Some(timeout);
-        self
     }
 
     /// Bind the UDP socket and report the address actually assigned.
@@ -225,24 +218,22 @@ impl Configured for DhcpTransport {
     /// server port; a Send Location answers the transaction its target names.
     const SETTINGS: &'static Settings = &Settings {
         technology: env!("CARGO_PKG_NAME"),
-        settings: &[Setting {
-            name: "timeout",
-            kind: Kind::Duration,
-            presence: Presence::Optional,
-            meaning: "How long a receive waits for a client's message; unbounded when left out.",
-            applies: Applies::Receive,
-        }],
+        settings: &[transport::configured::timeout(
+            Applies::Receive,
+            None,
+            "How long a receive waits for a client's message; unbounded when left out.",
+        )],
     };
 
     /// The schemes a Location's address is entered with to choose this technology.
     const SCHEMES: &'static [&'static str] = &["dhcp"];
 
-    fn configured(address: &str, settings: &Read) -> Result<Self> {
-        let transport = Self::new(address);
-        Ok(match settings.optional_duration("timeout") {
-            Some(timeout) => transport.timing_out_after(timeout),
-            None => transport,
-        })
+    fn timeout_kept(&mut self) -> Option<&mut dyn transport::configured::TimeoutKept> {
+        Some(&mut self.timeout)
+    }
+
+    fn configured(address: &str, _settings: &Read) -> Result<Self> {
+        Ok(Self::new(address))
     }
 }
 

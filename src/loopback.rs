@@ -16,6 +16,7 @@ use std::net::UdpSocket;
 use codec::hex;
 use net::ceiling;
 use transport::ArrivalIdentity;
+use transport::Configured;
 use transport::Taken;
 use transport::bound::{Bound, Reading};
 use transport::error::{Result, classify, protocol_error};
