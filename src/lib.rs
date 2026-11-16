@@ -64,7 +64,7 @@ pub struct DhcpTransport {
     timeout: Option<Duration>,
     /// The socket every send leaves from, bound once.
     sender: Sender,
-    /// The socket the first receive binds, and every receive reads.
+    /// The socket its open binds, and every receive reads.
     receiving: Kept<UdpSocket>,
 }
 
@@ -193,12 +193,12 @@ impl Transport for DhcpTransport {
         transport::Waiting::Waits("a read of the socket waits for a client's message")
     }
 
-    /// One client message, from the socket the first receive bound and
+    /// One client message, from the socket its open bound and
     /// kept: what arrived between two receives waits in its buffer.
     /// Acceptance is at-most-once here: the answer is a Message's to send
     /// ([`AT_MOST_ONCE`]).
     fn receive_up_to(&self, _most: usize) -> Result<Vec<Arrived>> {
-        let socket = self.receiving.bound(|| self.bind_udp())?;
+        let socket = self.receiving.listener()?;
         Ok(vec![self.receive_datagram(socket)?])
     }
 
@@ -234,6 +234,12 @@ impl Configured for DhcpTransport {
 
     fn configured(address: &str, _settings: &Read) -> Result<Self> {
         Ok(Self::new(address))
+    }
+
+    /// The socket every receive takes from, bound where a Receive Location
+    /// listens.
+    fn listening(&self) -> Result<Option<&str>> {
+        self.receiving.listening(|| self.bind_udp())
     }
 }
 
