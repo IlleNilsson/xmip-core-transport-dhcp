@@ -177,8 +177,7 @@ impl Message {
     #[must_use]
     pub fn hostname(&self) -> String {
         self.option(OPTION_HOSTNAME)
-            .map(|v| String::from_utf8_lossy(v).into_owned())
-            .unwrap_or_default()
+            .map_or_default(|v| String::from_utf8_lossy(v).into_owned())
     }
 
     /// The options as the Stream: one `name=value` line each.
