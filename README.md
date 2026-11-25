@@ -12,6 +12,8 @@ A send target is read by `net::Target` in [xmip-core-library-net](https://github
 
 A `0x` number in a target is read by `codec::hex::prefixed_number` in [xmip-core-library-codec](https://github.com/IlleNilsson/xmip-core-library-codec), which refuses a sign; until 2026-09-28 it was read with `from_str_radix`, which took `0x+7e8`.
 
+A Send Location's target is its whole address, `dhcp://host:port?xid=…&mac=…`, which a send reads the transaction it answers from (`Configured::own_target`); until 2026-11-25 it was the address without its scheme, and every send of a node was refused.
+
 ## Acknowledgement
 
 Acceptance is at-most-once here. A client message is a datagram, and what

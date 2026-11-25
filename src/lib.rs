@@ -228,6 +228,14 @@ impl Configured for DhcpTransport {
     /// The schemes a Location's address is entered with to choose this technology.
     const SCHEMES: &'static [&'static str] = &["dhcp"];
 
+    /// The whole address: a send reads the transaction it answers from a
+    /// `dhcp://host:port?xid=…&mac=…` target ([`DhcpTransport::reply_for`]),
+    /// so a Send Location answers what its address says; a Receive Location
+    /// binds the address in its own terms.
+    fn own_target(address: &str) -> &str {
+        address
+    }
+
     fn timeout_kept(&mut self) -> Option<&mut dyn transport::configured::TimeoutKept> {
         Some(&mut self.timeout)
     }
@@ -430,6 +438,35 @@ mod tests {
         assert_eq!(nak.message_type(), Some(MessageType::Nak));
         assert_eq!(nak.xid, 99);
         assert!(nak.option(message::OPTION_SERVER).is_none());
+    }
+
+    /// A Send Location as a node builds it, from its address, answers the
+    /// transaction its address names, its own target the whole `dhcp://`
+    /// address (the owner, 2026-11-25: *just do your best for now*). Until
+    /// 2026-11-25 its target was the address without its scheme, and every
+    /// send was refused as answering no transaction.
+    #[test]
+    fn a_send_location_answers_what_its_address_says() {
+        let client = UdpSocket::bind("127.0.0.1:0").expect("client");
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("timeout");
+        let at = client.local_addr().expect("address");
+        let address = format!("dhcp://{at}?xid=0x3903f326&mac=aa:bb:cc:dd:ee:ff&type=offer");
+        let sending = DhcpTransport::open(&address, Applies::Send, &[]).expect("sending");
+
+        sending
+            .send(DhcpTransport::own_target(&address), b"lease-time=3600\n")
+            .expect("answered where its address says");
+
+        let mut buffer = [0u8; MAX_MESSAGE];
+        let read = client.recv(&mut buffer).expect("the offer");
+        let offer = message::decode(&buffer[..read]).expect("decode");
+        assert_eq!((offer.op, offer.xid), (BOOTREPLY, 0x3903_f326));
+        assert_eq!(
+            offer.option_lines(),
+            b"message-type=offer\nlease-time=3600\n"
+        );
     }
 
     #[test]
