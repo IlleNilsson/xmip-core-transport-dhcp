@@ -34,30 +34,49 @@
 //! `name=value` lines, one option each. A send whose bytes are not UTF-8,
 //! or a line that is not an option, is refused with the reason, never
 //! guessed at; an option value that is not text is written as `0x` hex.
+//!
+//! **Built with its `declaration` feature alone** the crate is
+//! [`declaration`], what a Location of it is configured with, and none of
+//! the code above, which is behind the default feature: what the surfaces'
+//! library carries (ADR-0064, amendment 2026-11-26).
 
+#[cfg(feature = "declaration")]
+pub mod declaration;
+#[cfg(feature = "default")]
 pub mod loopback;
+#[cfg(feature = "default")]
 pub mod message;
+#[cfg(feature = "default")]
 mod option;
 
+#[cfg(feature = "default")]
 use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
+#[cfg(feature = "default")]
 use std::time::Duration;
 
+#[cfg(feature = "default")]
 pub use loopback::MAX_STREAM;
+#[cfg(feature = "default")]
 pub use message::{BOOTREPLY, BOOTREQUEST, MAX_MESSAGE, Message, MessageType};
+#[cfg(feature = "default")]
 use net::Target;
+#[cfg(feature = "default")]
 use transport::error::{Result, classify, protocol_error};
-use transport::kept::Kept;
-use transport::sender::Sender;
-use transport::socket;
-use transport::{Acknowledgement, Arrived, Configured, Directions, Transport};
-use xcore::settings::{Applies, Read, Settings};
+#[cfg(feature = "default")]
+use transport::{
+    Acknowledgement, Arrived, Configured, Directions, Transport, kept::Kept, sender::Sender, socket,
+};
+#[cfg(feature = "default")]
+use xcore::settings::{Read, Settings};
 
 /// Why a DHCP client message cannot be acknowledged after the receive
 /// cycle.
+#[cfg(feature = "default")]
 pub const AT_MOST_ONCE: &str = "a DHCP client message is a datagram whose answer, if any, is a \
                                 Message's to send, not this receive's: a release is never \
                                 answered at all";
 
+#[cfg(feature = "default")]
 #[derive(Clone)]
 pub struct DhcpTransport {
     bind: String,
@@ -68,6 +87,7 @@ pub struct DhcpTransport {
     receiving: Kept<UdpSocket>,
 }
 
+#[cfg(feature = "default")]
 impl DhcpTransport {
     /// Listen at `bind`, `0.0.0.0:67` being the server port.
     #[must_use]
@@ -150,6 +170,7 @@ impl DhcpTransport {
 }
 
 /// `0x3903f326` or `956363558`.
+#[cfg(feature = "default")]
 fn parse_xid(text: &str) -> Option<u32> {
     if text.starts_with("0x") {
         codec::hex::prefixed_number(text).ok()
@@ -160,6 +181,7 @@ fn parse_xid(text: &str) -> Option<u32> {
 
 /// One client message, whole; acceptance is at-most-once
 /// ([`AT_MOST_ONCE`]).
+#[cfg(feature = "default")]
 fn arrived(peer: SocketAddr, message: &Message) -> Arrived {
     Arrived::whole(
         format!(
@@ -176,6 +198,7 @@ fn arrived(peer: SocketAddr, message: &Message) -> Arrived {
     .from_peer_mac(&message.mac())
 }
 
+#[cfg(feature = "default")]
 impl Transport for DhcpTransport {
     fn name(&self) -> &'static str {
         "dhcp"
@@ -213,20 +236,10 @@ impl Transport for DhcpTransport {
     }
 }
 
+#[cfg(feature = "default")]
 impl Configured for DhcpTransport {
-    /// The address is where a Receive Location listens — `0.0.0.0:67` the
-    /// server port; a Send Location answers the transaction its target names.
-    const SETTINGS: &'static Settings = &Settings {
-        technology: env!("CARGO_PKG_NAME"),
-        settings: &[transport::configured::timeout(
-            Applies::Receive,
-            None,
-            "How long a receive waits for a client's message; unbounded when left out.",
-        )],
-    };
-
-    /// The schemes a Location's address is entered with to choose this technology.
-    const SCHEMES: &'static [&'static str] = &["dhcp"];
+    const SETTINGS: &'static Settings = declaration::SETTINGS;
+    const SCHEMES: &'static [&'static str] = declaration::SCHEMES;
 
     /// The whole address: a send reads the transaction it answers from a
     /// `dhcp://host:port?xid=…&mac=…` target ([`DhcpTransport::reply_for`]),
@@ -256,7 +269,7 @@ mod tests {
     use super::*;
     use transport::loopback::Loopback;
     use transport::payload::{edge_payloads, patterned};
-    use xcore::settings::Given;
+    use xcore::settings::{Applies, Given};
 
     #[test]
     fn dhcp_declares_its_settings_and_reads_through_them() {
